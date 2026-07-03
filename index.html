@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Readora AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Auth Screen ── -->
+  <section id="authSection" class="auth-screen">
+    <div class="auth-panel">
+      <h1>Readora</h1>
+      <p>Your intelligent study workspace.</p>
+      <div class="field">
+        <label>Email</label>
+        <input id="authEmail" type="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="authPassword" type="password" placeholder="Enter your password">
+      </div>
+      <div class="auth-actions">
+        <button id="loginButton">Log In</button>
+        <button id="signupButton" class="secondary-btn">Create Account</button>
+      </div>
+      <p id="authMessage"></p>
+    </div>
+  </section>
+
+  <!-- ── App Layout ── -->
+  <div id="appLayout" class="layout hidden">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h2>Readora</h2>
+        <p>Study Workspace</p>
+      </div>
+      <nav class="sidebar-nav">
+        <button id="newNoteButton" class="sidebar-btn">＋ New Note</button>
+        <button id="savedNotesButton" class="sidebar-btn">📚 Library</button>
+        <button id="themeButton" class="sidebar-btn">🌙 Dark Mode</button>
+      </nav>
+      <div class="sidebar-folders">
+        <h3>Folders</h3>
+        <div id="folderList"></div>
+      </div>
+      <div class="account-section">
+        <p id="userEmail"></p>
+        <button id="logoutButton" class="sidebar-btn">Log Out</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="app">
+
+      <!-- ── New Note (Minimal) ── -->
+      <section id="createSection" class="hidden">
+        <div class="create-card">
+          <h1 id="createHeading">New Note</h1>
+          <p class="create-subtitle">Add a title and create your note. All content — summaries, takeaways, questions — lives inside the note.</p>
+          <div class="field">
+            <label>Title <span class="req">*</span></label>
+            <input id="title" type="text" placeholder="e.g. NCERT History Class 12 Chapter 1">
+          </div>
+          <div class="field">
+            <label>Source</label>
+            <input id="source" type="text" placeholder="e.g. NCERT Themes in Indian History Part 1">
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <input id="category" type="text" placeholder="e.g. School, Fiction, Research, Self-help">
+          </div>
+          <div class="field">
+            <label>Folder</label>
+            <input id="folder" type="text" placeholder="e.g. History Class 12, Exam Prep">
+          </div>
+          <div class="create-actions">
+            <button id="saveButton">Create Note</button>
+            <button id="cancelCreateButton" class="secondary-btn">Cancel</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Library ── -->
+      <section id="savedSection" class="hidden">
+        <div class="library-header">
+          <h1>Library</h1>
+          <input id="searchInput" type="text" placeholder="Search notes…" class="search-bar">
+        </div>
+        <div id="notesList"></div>
+      </section>
+
+      <!-- ── Reader — Primary Workspace ── -->
+      <section id="readerSection" class="hidden">
+
+        <div class="reader-toolbar">
+          <button id="backToLibraryButton" class="back-btn">← Library</button>
+          <div class="reader-info">
+            <h1 id="readerTitle"></h1>
+            <p id="readerMeta"></p>
+          </div>
+          <span id="draftStatus" class="draft-status"></span>
+          <button id="saveReaderButton" class="save-btn">Save Changes</button>
+        </div>
+        <div id="draftBanner" class="draft-banner hidden">
+          <span id="draftBannerText"></span>
+          <button id="draftRestoreButton" class="draft-restore-btn">Restore</button>
+          <button id="draftDiscardButton" class="draft-discard-btn">Discard</button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="summaryEditorWrap">Summary</button>
+          <button class="tab-btn" data-tab="takeawaysEditorWrap">Key Takeaways</button>
+          <button class="tab-btn" data-tab="questionsEditor">Questions</button>
+          <button class="tab-btn" data-tab="examplesEditor">Examples</button>
+          <button class="tab-btn" data-tab="personalNotesEditor">Personal Notes</button>
+        </div>
+
+        <div class="reader-body">
+
+          <!-- Summary Tab -->
+          <div id="summaryEditorWrap" class="reader-page media-page active-page">
+            <textarea id="summaryEditor" placeholder="Write or generate a summary of this chapter or book…"></textarea>
+            <div class="upload-section">
+              <div class="upload-section-header">
+                <span>📄 Upload pages or PDF for AI Summary</span>
+                <span class="page-counter" id="readerSummaryPageCounter">0 / 150 files</span>
+              </div>
+              <input id="readerSummaryImageInput" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple>
+              <div id="readerSummaryImagePreview" class="image-preview"></div>
+              <div class="upload-actions">
+                <button id="readerGenerateSummaryButton" type="button" class="ai-btn" disabled>✨ Generate Summary</button>
+                <span id="readerSummaryAiStatus" class="ai-status"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Key Takeaways Tab -->
+          <div id="takeawaysEditorWrap" class="reader-page media-page">
+            <textarea id="takeawaysEditor" placeholder="Generate takeaways from uploaded pages, or write your own…"></textarea>
+            <div class="upload-section">
+              <div class="upload-section-header">
+                <span>📄 Upload pages or PDF for Key Takeaways</span>
+                <span class="page-counter" id="readerTakeawaysPageCounter">0 / 150 files</span>
+              </div>
+              <input id="readerTakeawaysImageInput" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple>
+              <div id="readerTakeawaysImagePreview" class="image-preview"></div>
+              <div class="upload-actions">
+                <button id="readerGenerateTakeawaysButton" type="button" class="ai-btn" disabled>✨ Generate Takeaways</button>
+                <span id="readerTakeawaysAiStatus" class="ai-status"></span>
+              </div>
+            </div>
+            <div class="mnemonic-section">
+              <div class="mnemonic-header">
+                <span>🧠 Memory Tricks</span>
+                <span class="mnemonic-hint">Generates mnemonics from your takeaways above</span>
+              </div>
+              <div class="upload-actions">
+                <button id="readerGenerateMnemonicsButton" type="button" class="mnemonic-btn">✨ Generate Mnemonics</button>
+                <span id="readerMnemonicsAiStatus" class="ai-status"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Questions Tab -->
+          <div id="questionsEditor" class="reader-page media-page">
+            <textarea id="questionsText" placeholder="Write your questions here, or upload images for AI to explain them…"></textarea>
+            <div class="upload-section">
+              <div class="upload-section-header">
+                <span>📄 Upload question images or PDF for AI Explanation</span>
+                <span class="page-counter" id="readerQuestionsPageCounter">0 / 150 files</span>
+              </div>
+              <input id="readerQuestionsAiImageInput" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple>
+              <div id="readerQuestionsAiImagePreview" class="image-preview"></div>
+              <div class="upload-actions">
+                <button id="readerGenerateQuestionsButton" type="button" class="ai-btn" disabled>✨ Explain with AI</button>
+                <span id="readerQuestionsAiStatus" class="ai-status"></span>
+              </div>
+            </div>
+            <div class="concept-help-section">
+              <div class="concept-help-header">
+                <span>🤔 Still confused? Ask AI directly</span>
+              </div>
+              <input id="readerConceptHelpInput" type="text" placeholder="Type exactly what you don't understand — e.g. What is a taxon? Why is Monera a kingdom?">
+              <div class="concept-help-actions">
+                <button id="readerGetConceptHelpButton" type="button" class="ai-btn">✨ Explain with Examples</button>
+                <span id="readerConceptHelpStatus" class="ai-status"></span>
+              </div>
+            </div>
+            <div class="image-save-section">
+              <label class="upload-label">Save question images to this note</label>
+              <input id="questionImageInput" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+              <div id="questionImagePreview" class="image-preview"></div>
+            </div>
+          </div>
+
+          <!-- Examples Tab -->
+          <div id="examplesEditor" class="reader-page media-page">
+            <textarea id="examplesText" placeholder="Examples appear here when generated, or write your own…"></textarea>
+            <div class="ask-ai-section">
+              <div class="ask-ai-header">
+                <span>💬 Ask AI about anything in this chapter</span>
+              </div>
+              <div class="ask-ai-input-row">
+                <input id="examplesAskInput" type="text" placeholder="e.g. What is a taxon? Why is Monera different from Bacteria?">
+                <button id="examplesAskButton" type="button" class="ask-ai-btn">✨ Ask</button>
+              </div>
+              <span id="examplesAskStatus" class="ai-status"></span>
+            </div>
+            <div class="upload-section">
+              <div class="upload-section-header">
+                <span>📄 Upload pages or PDF for AI Examples</span>
+                <span class="page-counter" id="readerExamplesPageCounter">0 / 150 files</span>
+              </div>
+              <input id="readerExamplesAiImageInput" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple>
+              <div id="readerExamplesAiImagePreview" class="image-preview"></div>
+              <div class="upload-actions">
+                <button id="readerGenerateExamplesButton" type="button" class="ai-btn" disabled>✨ Generate Examples</button>
+                <span id="readerExamplesAiStatus" class="ai-status"></span>
+              </div>
+            </div>
+            <div class="image-save-section">
+              <label class="upload-label">Save example images to this note</label>
+              <input id="exampleImageInput" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+              <div id="exampleImagePreview" class="image-preview"></div>
+            </div>
+          </div>
+
+          <!-- Personal Notes Tab -->
+          <textarea id="personalNotesEditor" class="reader-page" placeholder="Write your personal thoughts, reflections, and notes here…"></textarea>
+
+        </div><!-- .reader-body -->
+      </section><!-- #readerSection -->
+
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+  <script src="auth.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
