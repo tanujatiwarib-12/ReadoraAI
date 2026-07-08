@@ -1034,3 +1034,407 @@ body.dark-mode .concept-quick-btn:hover { background: #2e3c28; }
 body.dark-mode .auth-panel { background: #1c1c1c; border-color: #2a2a2a; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
 body.dark-mode .auth-panel h1 { color: #f0ebe4; }
 body.dark-mode .auth-panel > p { color: #a08888; }
+
+/* ════════════════════════════════════════════════
+   REVISION COACH OVERLAY
+════════════════════════════════════════════════ */
+
+.coach-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.coach-panel {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.28);
+}
+
+/* Header */
+.coach-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1.5px solid #ede5dc;
+  flex-shrink: 0;
+}
+
+.coach-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5a3e8a;
+  background: #f0ebfa;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.coach-note-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2a1f1f;
+}
+
+.coach-close-btn {
+  background: #f0ebe4;
+  color: #5a4040;
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.coach-close-btn:hover { background: #e0d5cc; transform: none; }
+
+/* Content / Phases */
+.coach-phase {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.coach-phase.hidden { display: none; }
+
+.coach-phase-title {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2a1f1f;
+}
+
+.coach-phase-hint {
+  margin: -10px 0 16px;
+  font-size: 13px;
+  color: #8a7070;
+}
+
+/* Phase 1 — Recall */
+.coach-prompt-card {
+  background: #f5f0ff;
+  border: 1.5px solid #ddd0f5;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+
+.coach-prompt-card h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #3a2a6a;
+}
+
+.coach-prompt-card p {
+  margin: 0;
+  font-size: 14px;
+  color: #6a5a8a;
+  line-height: 1.6;
+}
+
+.coach-textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 14px 16px;
+  border: 1.5px solid #e0d6cc;
+  border-radius: 12px;
+  font-size: 15px;
+  font-family: inherit;
+  line-height: 1.7;
+  color: #1a1a1a;
+  background: #fdfcfb;
+  resize: vertical;
+  margin-bottom: 18px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.coach-textarea:focus {
+  outline: none;
+  border-color: #5a3e8a;
+  box-shadow: 0 0 0 3px rgba(90, 62, 138, 0.1);
+}
+
+/* Phase actions */
+.coach-phase-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.coach-primary-btn {
+  background: linear-gradient(135deg, #5a3e8a, #7254aa);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.coach-primary-btn:hover:not(:disabled) { opacity: 0.9; }
+.coach-primary-btn:active { transform: scale(0.98); }
+.coach-primary-btn:disabled { background: #c5bdd4; cursor: not-allowed; }
+
+.coach-ghost-btn {
+  background: transparent;
+  color: #8a7070;
+  border: 1.5px solid #e0d6cc;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.coach-ghost-btn:hover { background: #f5f0ea; }
+
+/* Phase 2 — Loading */
+.coach-loading-state {
+  text-align: center;
+  padding: 60px 24px;
+}
+
+.coach-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #ede0f8;
+  border-top-color: #5a3e8a;
+  border-radius: 50%;
+  animation: coachSpin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes coachSpin { to { transform: rotate(360deg); } }
+
+.coach-loading-state p {
+  font-size: 16px;
+  font-weight: 500;
+  color: #3a2a6a;
+  margin: 0 0 6px;
+}
+
+.coach-loading-state span {
+  font-size: 13px;
+  color: #9a8aaa;
+}
+
+/* Phase 3 — Gap Results */
+.coach-result-section {
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.coach-result-section ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.coach-result-section li {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.coach-result-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Strong */
+.coach-result-section:has(.coach-label-strong),
+.coach-result-section:first-of-type { background: #f0faf0; border: 1.5px solid #c0e4c0; }
+.coach-label-strong { color: #2a6a2a; }
+.coach-result-section:has(.coach-label-strong) li { color: #3a7a3a; }
+
+/* Forgotten */
+.coach-result-section:has(.coach-label-forgotten) { background: #fff8ec; border: 1.5px solid #f0d890; }
+.coach-label-forgotten { color: #7a5010; }
+.coach-result-section:has(.coach-label-forgotten) li { color: #8a6020; }
+
+/* Misconception */
+.coach-result-section:has(.coach-label-misconception) { background: #fff0f0; border: 1.5px solid #f0c0c0; }
+.coach-label-misconception { color: #8a2020; }
+.coach-result-section:has(.coach-label-misconception) li { color: #9a3030; }
+
+/* Fallback for browsers without :has() */
+#coachStrongSection        { background: #f0faf0; border: 1.5px solid #c0e4c0; }
+#coachForgottenSection     { background: #fff8ec; border: 1.5px solid #f0d890; }
+#coachMisconceptionSection { background: #fff0f0; border: 1.5px solid #f0c0c0; }
+#coachStrongSection li        { color: #3a7a3a; }
+#coachForgottenSection li     { color: #8a6020; }
+#coachMisconceptionSection li { color: #9a3030; }
+.coach-label-strong       { color: #2a6a2a; }
+.coach-label-forgotten    { color: #7a5010; }
+.coach-label-misconception{ color: #8a2020; }
+
+/* Phase 4 — Reconnection cards */
+.coach-reconnection { display: flex; flex-direction: column; gap: 14px; }
+
+.reconnect-card {
+  background: #faf5ff;
+  border: 1.5px solid #e0d0f8;
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.reconnect-card h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #3a2a6a;
+}
+
+.reconnect-trigger {
+  font-size: 13.5px;
+  color: #5a4a8a;
+  margin: 0 0 8px;
+  font-style: italic;
+}
+
+.reconnect-meaning {
+  font-size: 14px;
+  color: #2a1f1f;
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+.reconnect-example {
+  font-size: 13.5px;
+  color: #3a5a2a;
+  background: #f0f8e8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Phase 5 — Complete */
+.coach-complete {
+  text-align: center;
+  padding: 32px 20px 20px;
+}
+
+.coach-complete-icon {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #3d7a3d, #52a052);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin: 0 auto 16px;
+  color: white;
+  font-weight: 700;
+}
+
+.coach-complete h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #2a1f1f;
+}
+
+.coach-complete-summary {
+  font-size: 15px;
+  color: #5a4a4a;
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.coach-complete-hint {
+  font-size: 13px;
+  color: #9a8080;
+  margin: 0 0 20px;
+}
+
+/* Trigger button in toolbar */
+.coach-trigger-btn {
+  background: linear-gradient(135deg, #5a3e8a, #7254aa);
+  color: white;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.coach-trigger-btn:hover { opacity: 0.9; }
+.coach-trigger-btn:active { transform: scale(0.98); }
+
+/* ── Dark mode ── */
+body.dark-mode .coach-panel {
+  background: #1c1c1c;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+}
+
+body.dark-mode .coach-header { border-color: #2a2a2a; }
+body.dark-mode .coach-badge { background: #2a1a40; color: #c0a8e8; }
+body.dark-mode .coach-note-name { color: #f0ebe4; }
+body.dark-mode .coach-close-btn { background: #2a2a2a; color: #c0b0b0; }
+body.dark-mode .coach-close-btn:hover { background: #333; }
+body.dark-mode .coach-phase-title { color: #f0ebe4; }
+body.dark-mode .coach-prompt-card { background: #1a1428; border-color: #3a2855; }
+body.dark-mode .coach-prompt-card h3 { color: #c0a8e8; }
+body.dark-mode .coach-prompt-card p { color: #9a88c8; }
+body.dark-mode .coach-textarea { background: #141414; color: #f0ebe4; border-color: #333; }
+body.dark-mode .coach-textarea:focus { border-color: #7a5aaa; box-shadow: 0 0 0 3px rgba(122,90,170,0.2); }
+body.dark-mode .coach-ghost-btn { color: #a08888; border-color: #333; }
+body.dark-mode .coach-ghost-btn:hover { background: #252525; }
+body.dark-mode .coach-loading-state p { color: #c0a8e8; }
+body.dark-mode .coach-loading-state span { color: #9a7aaa; }
+body.dark-mode .coach-spinner { border-color: #2a1840; border-top-color: #7a5aaa; }
+body.dark-mode #coachStrongSection        { background: #0f1e0f; border-color: #1e3a1e; }
+body.dark-mode #coachForgottenSection     { background: #1e1a08; border-color: #4a3a08; }
+body.dark-mode #coachMisconceptionSection { background: #1e0f0f; border-color: #4a1818; }
+body.dark-mode #coachStrongSection li        { color: #8aca8a; }
+body.dark-mode #coachForgottenSection li     { color: #c0901a; }
+body.dark-mode #coachMisconceptionSection li { color: #d06060; }
+body.dark-mode .coach-label-strong        { color: #7aba7a; }
+body.dark-mode .coach-label-forgotten     { color: #c09020; }
+body.dark-mode .coach-label-misconception { color: #d05050; }
+body.dark-mode .reconnect-card { background: #1a1428; border-color: #2e2045; }
+body.dark-mode .reconnect-card h4 { color: #c0a8e8; }
+body.dark-mode .reconnect-trigger { color: #a090c8; }
+body.dark-mode .reconnect-meaning { color: #e0d8f0; }
+body.dark-mode .reconnect-example { background: #141e10; color: #9ab088; }
+body.dark-mode .coach-complete h3 { color: #f0ebe4; }
+body.dark-mode .coach-complete-summary { color: #c0b0b0; }
+body.dark-mode .coach-complete-hint { color: #806868; }

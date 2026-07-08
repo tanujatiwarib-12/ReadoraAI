@@ -1125,53 +1125,282 @@ themeButton.addEventListener("click", function () {
   applyTheme();
 });
 
-// ─── Auth state — restore exact position after reload ──────────
-// Supabase fires onAuthStateChange on:
-//   1. Initial page load (INITIAL_SESSION)
-//   2. Tab comes back into focus (TOKEN_REFRESHED)
-//   3. Actual sign in / sign out
+// ─── Auth state handler ────────────────────────────────────────
+// Supabase fires onAuthStateChange with these event types:
+//   INITIAL_SESSION → page loaded with existing session  → restore position
+//   SIGNED_IN       → user just logged in               → go to library
+//   TOKEN_REFRESHED → background token refresh           → do NOTHING to navigation
+//   USER_UPDATED    → profile changed                   → do NOTHING to navigation
+//   SIGNED_OUT      → user logged out                   → reset everything
 //
-// We use localStorage to remember which section + note the user
-// was on so that even a full page reload puts them back exactly.
-
-let appInitialized = false;
+// Previous bug: we ignored the event type entirely, so TOKEN_REFRESHED
+// (which fires every time you switch browser tabs back) was triggering
+// showSection("saved") and kicking users back to the Library.
 
 supabaseClient.auth.onAuthStateChange(async function (event, session) {
-  if (session) {
-    await loadNotes(); // wait for notes to load before restoring position
-
-    if (!appInitialized) {
-      appInitialized = true;
-
-      const lastSection = localStorage.getItem("readora_section");
-      const lastNoteId  = localStorage.getItem("readora_open_note");
-
-      if (lastSection === "reader" && lastNoteId) {
-        // Check the note still exists (not deleted)
-        const noteExists = notes.find(function (n) { return n.id === lastNoteId; });
-        if (noteExists) {
-          openNote(lastNoteId); // restores reader + applies any local draft
-        } else {
-          localStorage.removeItem("readora_open_note");
-          showSection("saved");
-        }
-      } else if (lastSection === "create") {
-        showSection("create");
-      } else {
-        showSection("saved"); // default — Library
-      }
-    }
-    // TOKEN_REFRESHED, USER_UPDATED etc. → appInitialized is true → do nothing
-
-  } else {
+  if (!session) {
     // Signed out — full reset
-    appInitialized = false;
     localStorage.removeItem("readora_section");
     localStorage.removeItem("readora_open_note");
     notes = [];
     showNotes();
     showFoldersInSidebar();
+    return;
   }
+
+  // Always silently refresh notes data in the background
+  await loadNotes();
+
+  // Only change navigation on actual session-start events
+  if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+    const lastSection = localStorage.getItem("readora_section");
+    const lastNoteId  = localStorage.getItem("readora_open_note");
+
+    if (lastSection === "reader" && lastNoteId) {
+      const noteExists = notes.find(function (n) { return n.id === lastNoteId; });
+      if (noteExists) {
+        openNote(lastNoteId); // restores reader + applies any local draft
+      } else {
+        localStorage.removeItem("readora_open_note");
+        showSection("saved");
+      }
+    } else if (lastSection === "create") {
+      showSection("create");
+    } else {
+      showSection("saved"); // default on first ever visit
+    }
+  }
+
+  // TOKEN_REFRESHED, USER_UPDATED → notes refreshed above, navigation unchanged
 });
 
 applyTheme();
+
+// ─── Revision Coach ────────────────────────────────────────────
+
+const revisionCoachButton   = document.getElementById("revisionCoachButton");
+const coachOverlay          = document.getElementById("coachOverlay");
+const coachCloseButton      = document.getElementById("coachCloseButton");
+const coachNoteName         = document.getElementById("coachNoteName");
+const coachRecallInput      = document.getElementById("coachRecallInput");
+const coachSubmitRecall     = document.getElementById("coachSubmitRecall");
+const coachLoadingText      = document.getElementById("coachLoadingText");
+const coachStrongSection    = document.getElementById("coachStrongSection");
+const coachForgottenSection = document.getElementById("coachForgottenSection");
+const coachMisconceptionSection = document.getElementById("coachMisconceptionSection");
+const coachRebuildButton    = document.getElementById("coachRebuildButton");
+const coachReconnectionContent = document.getElementById("coachReconnectionContent");
+const coachCompleteSummary  = document.getElementById("coachCompleteSummary");
+const coachPhase1 = document.getElementById("coachPhase1");
+const coachPhase2 = document.getElementById("coachPhase2");
+const coachPhase3 = document.getElementById("coachPhase3");
+const coachPhase4 = document.getElementById("coachPhase4");
+const coachPhase5 = document.getElementById("coachPhase5");
+
+let coachGapData = null;
+
+function showCoachPhase(num) {
+  [coachPhase1, coachPhase2, coachPhase3, coachPhase4, coachPhase5]
+    .forEach(function (p, i) { p.classList.toggle("hidden", i + 1 !== num); });
+}
+
+function getNoteContentForCoach() {
+  if (!openNoteId) return "";
+  const note = notes.find(function (n) { return n.id === openNoteId; });
+  if (!note) return "";
+  return [note.summary, note.takeaways, note.questions, note.examples, note.personalNotes]
+    .filter(Boolean).join("\n\n");
+}
+
+function openRevisionCoach() {
+  if (!openNoteId) return;
+  const note = notes.find(function (n) { return n.id === openNoteId; });
+  if (!note) return;
+
+  const noteContent = getNoteContentForCoach();
+  if (!noteContent.trim()) {
+    alert("This note has no content yet.\nGenerate a Summary or Key Takeaways first, then come back to Revision Coach.");
+    return;
+  }
+
+  coachNoteName.textContent = note.title || "Untitled Note";
+  coachRecallInput.value = "";
+  coachGapData = null;
+  coachReconnectionContent.innerHTML = "";
+  showCoachPhase(1);
+  coachOverlay.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  setTimeout(function () { coachRecallInput.focus(); }, 100);
+}
+
+function closeRevisionCoach() {
+  coachOverlay.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+revisionCoachButton.addEventListener("click", openRevisionCoach);
+coachCloseButton.addEventListener("click", closeRevisionCoach);
+document.getElementById("coachCancelBtn").addEventListener("click", closeRevisionCoach);
+document.getElementById("coachExitGapsBtn").addEventListener("click", closeRevisionCoach);
+document.getElementById("coachFinishButton").addEventListener("click", closeRevisionCoach);
+
+coachOverlay.addEventListener("click", function (e) {
+  if (e.target === coachOverlay) closeRevisionCoach();
+});
+
+coachRecallInput.addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && e.ctrlKey) { coachSubmitRecall.click(); }
+});
+
+// Phase 1 → Phase 3: Gap Analysis
+coachSubmitRecall.addEventListener("click", async function () {
+  const recall = coachRecallInput.value.trim();
+  if (!recall) {
+    alert("Please write what you remember before continuing.");
+    return;
+  }
+
+  const noteContent = getNoteContentForCoach();
+  showCoachPhase(2);
+  coachLoadingText.textContent = "Comparing your recall to your notes...";
+  coachSubmitRecall.disabled = true;
+
+  try {
+    const result = await callClaudeAPI({
+      model: "claude-sonnet-4-6",
+      max_tokens: 800,
+      system: "You are a revision coach. Compare the student's free recall against the note content below. Output ONLY a valid JSON object with no markdown, no backticks, no explanation:\n{\"strong\":[\"things correctly remembered\"],\"forgotten\":[\"important things from notes NOT mentioned in recall\"],\"misconceptions\":[\"things the student stated incorrectly compared to notes\"]}\nMax 6 items per array. Keep each item under 10 words.",
+      messages: [{ role: "user", content: "NOTE CONTENT:\n" + noteContent + "\n\nSTUDENT RECALL:\n" + recall }]
+    });
+
+    const raw  = result.content.map(function (b) { return b.text || ""; }).join("").trim();
+    const clean = raw.replace(/```json|```/g, "").trim();
+    coachGapData = JSON.parse(clean);
+
+    renderGapAnalysis(coachGapData);
+    showCoachPhase(3);
+
+  } catch (err) {
+    showCoachPhase(1);
+    alert("Analysis failed — please try again.\n(" + err.message + ")");
+  } finally {
+    coachSubmitRecall.disabled = false;
+  }
+});
+
+function renderGapAnalysis(gaps) {
+  const strong         = gaps.strong         || [];
+  const forgotten      = gaps.forgotten      || [];
+  const misconceptions = gaps.misconceptions || [];
+
+  if (strong.length > 0) {
+    coachStrongSection.innerHTML =
+      '<div class="coach-result-label coach-label-strong">Still with you (' + strong.length + ')</div>' +
+      '<ul>' + strong.map(function (i) { return "<li>" + i + "</li>"; }).join("") + "</ul>";
+    coachStrongSection.classList.remove("hidden");
+  } else {
+    coachStrongSection.classList.add("hidden");
+  }
+
+  if (forgotten.length > 0) {
+    coachForgottenSection.innerHTML =
+      '<div class="coach-result-label coach-label-forgotten">Needs rebuilding (' + forgotten.length + ')</div>' +
+      '<ul>' + forgotten.map(function (i) { return "<li>" + i + "</li>"; }).join("") + "</ul>";
+    coachForgottenSection.classList.remove("hidden");
+  } else {
+    coachForgottenSection.classList.add("hidden");
+  }
+
+  if (misconceptions.length > 0) {
+    coachMisconceptionSection.innerHTML =
+      '<div class="coach-result-label coach-label-misconception">Remembered incorrectly (' + misconceptions.length + ')</div>' +
+      '<ul>' + misconceptions.map(function (i) { return "<li>" + i + "</li>"; }).join("") + "</ul>";
+    coachMisconceptionSection.classList.remove("hidden");
+  } else {
+    coachMisconceptionSection.classList.add("hidden");
+  }
+
+  const totalGaps = forgotten.length + misconceptions.length;
+  if (totalGaps === 0) {
+    coachRebuildButton.textContent = "Perfect recall!";
+    coachRebuildButton.disabled = true;
+  } else {
+    coachRebuildButton.textContent = "Rebuild " + totalGaps + " gap" + (totalGaps !== 1 ? "s" : "");
+    coachRebuildButton.disabled = false;
+  }
+}
+
+// Phase 3 → Phase 4: Reconnection
+coachRebuildButton.addEventListener("click", async function () {
+  if (!coachGapData) return;
+
+  const allGaps = [...(coachGapData.forgotten || []), ...(coachGapData.misconceptions || [])];
+  if (allGaps.length === 0) { showCoachPhase(5); return; }
+
+  const noteContent = getNoteContentForCoach();
+  showCoachPhase(2);
+  coachLoadingText.textContent = "Rebuilding " + allGaps.length + " forgotten concept" + (allGaps.length !== 1 ? "s" : "") + "...";
+  coachRebuildButton.disabled = true;
+
+  try {
+    const result = await callClaudeAPI({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      system: "You are a warm revision coach inside Readora AI. The student has already studied this material and once understood it. Help them RECONNECT with what they forgot — do NOT teach from scratch.\n\nFor each concept, use EXACTLY this format:\n\n**[Concept Name]**\nTrigger: [one sentence to jog their memory]\nMeaning: [clear explanation in 1-2 sentences]\nExample: [one concrete, relatable example]\n\nBe warm and concise. Assume prior exposure.",
+      messages: [{ role: "user", content: "What the student forgot:\n" + allGaps.join("\n") + "\n\nFull note for context:\n" + noteContent }]
+    });
+
+    const text = result.content.map(function (b) { return b.text || ""; }).join("").trim();
+    renderReconnection(text, allGaps.length);
+    showCoachPhase(4);
+
+  } catch (err) {
+    showCoachPhase(3);
+    alert("Reconnection failed — please try again.\n(" + err.message + ")");
+  } finally {
+    coachRebuildButton.disabled = false;
+  }
+});
+
+function renderReconnection(text, gapCount) {
+  const lines = text.split("\n");
+  let html = "";
+  let inCard = false;
+
+  lines.forEach(function (line) {
+    const t = line.trim();
+    if (!t) return;
+
+    if (t.startsWith("**") && t.endsWith("**")) {
+      if (inCard) html += "</div>";
+      html += '<div class="reconnect-card"><h4>' + t.replace(/\*\*/g, "") + "</h4>";
+      inCard = true;
+    } else if (t.startsWith("Trigger:")) {
+      html += '<p class="reconnect-trigger"><strong>Memory trigger</strong> — ' + t.replace("Trigger:", "").trim() + "</p>";
+    } else if (t.startsWith("Meaning:")) {
+      html += '<p class="reconnect-meaning">' + t.replace("Meaning:", "").trim() + "</p>";
+    } else if (t.startsWith("Example:")) {
+      html += '<p class="reconnect-example"><strong>Example:</strong> ' + t.replace("Example:", "").trim() + "</p>";
+    } else {
+      const formatted = t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      html += "<p>" + formatted + "</p>";
+    }
+  });
+
+  if (inCard) html += "</div>";
+
+  coachReconnectionContent.innerHTML = html;
+}
+
+// Phase 4 → Phase 5: Complete
+document.getElementById("coachCompleteButton").addEventListener("click", function () {
+  const strong    = (coachGapData && coachGapData.strong)         ? coachGapData.strong.length         : 0;
+  const gaps      = ((coachGapData && coachGapData.forgotten)     ? coachGapData.forgotten.length     : 0) +
+                    ((coachGapData && coachGapData.misconceptions) ? coachGapData.misconceptions.length : 0);
+
+  coachCompleteSummary.textContent =
+    "You remembered " + strong + " concept" + (strong !== 1 ? "s" : "") + " correctly and rebuilt " +
+    gaps + " forgotten gap" + (gaps !== 1 ? "s" : "") + ". Your revision is complete.";
+
+  showCoachPhase(5);
+});
