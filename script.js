@@ -674,7 +674,27 @@ setupStagedImageUpload(readerTakeawaysImageInput,   readerTakeawaysImagePreview,
 setupStagedImageUpload(readerQuestionsAiImageInput, readerQuestionsAiImagePreview, readerQuestionsPageCounter, readerGenerateQuestionsButton, readerStagedQuestionImages,  "readerQuestionsStaged");
 setupStagedImageUpload(readerExamplesAiImageInput,  readerExamplesAiImagePreview,  readerExamplesPageCounter,  readerGenerateExamplesButton,  readerStagedExamplesImages,  "readerExamplesStaged");
 
-setupAiGenerateButton(readerGenerateSummaryButton,   readerSummaryAiStatus,   readerStagedSummaryImages,   "summary",   function () { return summaryEditor; },   { loading: "Reading pages…",    success: "✅ Summary added!" });
+// Summary uses the smart chunked pipeline — NOT the generic setupAiGenerateButton
+// (other modes still use the generic handler below)
+readerGenerateSummaryButton.addEventListener("click", async function () {
+  if (readerStagedSummaryImages.length === 0) return;
+  readerGenerateSummaryButton.disabled = true;
+
+  try {
+    const result = await callSmartSummary(
+      readerStagedSummaryImages,
+      summaryEditor.value.trim(),
+      function (msg) { readerSummaryAiStatus.textContent = msg; }
+    );
+    appendToField(summaryEditor, result);
+    readerSummaryAiStatus.textContent = "✅ Summary complete!";
+    setTimeout(function () { readerSummaryAiStatus.textContent = ""; }, 3000);
+  } catch (err) {
+    readerSummaryAiStatus.textContent = "❌ Failed: " + err.message;
+  } finally {
+    readerGenerateSummaryButton.disabled = readerStagedSummaryImages.length === 0;
+  }
+});
 setupAiGenerateButton(readerGenerateTakeawaysButton, readerTakeawaysAiStatus, readerStagedTakeawaysImages, "takeaways", function () { return takeawaysEditor; }, { loading: "Reading pages…",    success: "✅ Takeaways added!" });
 setupAiGenerateButton(readerGenerateQuestionsButton, readerQuestionsAiStatus, readerStagedQuestionImages,  "questions", function () { return questionsText; },   { loading: "Reading questions…", success: "✅ Explanation added!" });
 setupAiGenerateButton(readerGenerateExamplesButton,  readerExamplesAiStatus,  readerStagedExamplesImages,  "examples",  function () { return examplesText; },    { loading: "Reading pages…",    success: "✅ Examples added!" });
@@ -1404,3 +1424,180 @@ document.getElementById("coachCompleteButton").addEventListener("click", functio
 
   showCoachPhase(5);
 });
+
+// ─── Smart Summary Pipeline ────────────────────────────────────
+// Handles small docs in one pass and large docs via Map-Reduce
+// chunking. The user always sees one clean final summary regardless
+// of how many internal API calls were needed.
+
+const SUMMARY_CHUNK_SIZE = 10; // pages per chunk (images)
+
+let summaryDetailLevel = "detailed";
+
+const DETAIL_CONFIG = {
+  quick: {
+    label:       "Quick Revision",
+    hint:        "Main concepts only, fast to read. (~2\u20133 min)",
+    chunkTokens: 300,
+    finalTokens: 700,
+    chunkGuide:  "Extract only the most important concepts and key points. Be brief.",
+    finalGuide:  "Write a concise overview. Cover only the most essential concepts. Students should finish reading in 2\u20133 minutes."
+  },
+  detailed: {
+    label:       "Detailed Summary",
+    hint:        "All important concepts with explanations and examples. (~5\u20138 min read)",
+    chunkTokens: 600,
+    finalTokens: 1400,
+    chunkGuide:  "Summarise all important concepts, definitions, examples, and key points clearly.",
+    finalGuide:  "Write comprehensive revision notes covering all important concepts with explanations and examples. Ideal for thorough revision."
+  },
+  comprehensive: {
+    label:       "Comprehensive Notes",
+    hint:        "Captures nearly everything. Best for deep revision. (~12\u201318 min read)",
+    chunkTokens: 900,
+    finalTokens: 2400,
+    chunkGuide:  "Capture every important concept, definition, formula, example, exception, and explanation in detail.",
+    finalGuide:  "Write thorough revision notes that capture all important information from the chapter. Students should be able to revise entirely from these notes without referring to the original source."
+  }
+};
+
+// Wire up detail level buttons
+document.querySelectorAll(".detail-btn").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    document.querySelectorAll(".detail-btn").forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+    summaryDetailLevel = btn.dataset.level;
+    const hint = document.getElementById("summaryDetailHint");
+    if (hint) hint.textContent = DETAIL_CONFIG[summaryDetailLevel].hint;
+  });
+});
+
+// Build API content array from staged files (images + PDFs)
+function buildFileContentArray(files) {
+  return files.map(function (file) {
+    if (file.fileType === "application/pdf") {
+      return { type: "document", source: { type: "base64", media_type: "application/pdf", data: getBase64Data(file.dataUrl) } };
+    }
+    return { type: "image", source: { type: "base64", media_type: getMediaType(file.dataUrl), data: getBase64Data(file.dataUrl) } };
+  });
+}
+
+// Entry point — decides single-pass or chunked based on file count
+async function callSmartSummary(files, existingText, onProgress) {
+  const meta   = getNoteMeta();
+  const config = DETAIL_CONFIG[summaryDetailLevel];
+
+  // PDFs are processed natively by Claude (multi-page aware).
+  // For image sets over CHUNK_SIZE, use the chunked pipeline.
+  const imageFiles = files.filter(function (f) { return f.fileType !== "application/pdf"; });
+  const needsChunking = imageFiles.length > SUMMARY_CHUNK_SIZE;
+
+  if (!needsChunking) {
+    onProgress("Generating summary\u2026");
+    return await singlePassSummary(files, existingText, meta, config);
+  }
+
+  // ── Chunked pipeline (large image sets) ───────────────────────
+  const chunks = [];
+  for (var i = 0; i < imageFiles.length; i += SUMMARY_CHUNK_SIZE) {
+    chunks.push(imageFiles.slice(i, i + SUMMARY_CHUNK_SIZE));
+  }
+
+  const chunkSummaries = [];
+  for (var c = 0; c < chunks.length; c++) {
+    const pageStart = c * SUMMARY_CHUNK_SIZE + 1;
+    const pageEnd   = Math.min((c + 1) * SUMMARY_CHUNK_SIZE, imageFiles.length);
+    onProgress("Reading pages " + pageStart + "\u2013" + pageEnd + " (" + (c + 1) + " of " + chunks.length + ")\u2026");
+    const sectionSummary = await summariseChunk(chunks[c], c, chunks.length, meta, config);
+    chunkSummaries.push(sectionSummary);
+  }
+
+  onProgress("Synthesising final summary\u2026");
+  return await synthesisPass(chunkSummaries, existingText, meta, config);
+}
+
+// Single-pass for small documents or PDFs
+async function singlePassSummary(files, existingText, meta, config) {
+  const system = "You are a revision assistant inside Readora AI. The student has already studied this material. " +
+    config.finalGuide +
+    " Write in clear, structured prose. Assume prior exposure \u2014 do not over-explain basics." +
+    (existingText ? " The student already has notes \u2014 add to them without repeating." : "");
+
+  const content = buildFileContentArray(files);
+  let prompt = "Chapter: \"" + meta.title + "\"";
+  if (meta.source) prompt += "\nSource: " + meta.source;
+  if (existingText) prompt += "\n\nStudent\u2019s existing notes (add to these, do not repeat):\n" + existingText;
+  prompt += "\n\nWrite a revision summary of this content.";
+  content.push({ type: "text", text: prompt });
+
+  const data = await callClaudeAPI({
+    model: "claude-sonnet-4-6",
+    max_tokens: config.finalTokens,
+    system: system,
+    messages: [{ role: "user", content: content }]
+  });
+
+  return data.content.map(function (b) { return b.text || ""; }).join("").trim();
+}
+
+// Map step — summarise one chunk of pages
+async function summariseChunk(chunk, index, total, meta, config) {
+  const pageStart = index * SUMMARY_CHUNK_SIZE + 1;
+  const pageEnd   = (index + 1) * SUMMARY_CHUNK_SIZE;
+  const position  = "Pages " + pageStart + "\u2013" + pageEnd + " (section " + (index + 1) + " of " + total + ")";
+
+  const system = "You are processing one section of a large academic chapter. " +
+    position + ". " + config.chunkGuide +
+    " Output clean notes or prose. Do not write a chapter introduction or conclusion \u2014 this is a middle section being processed independently. Focus on content only.";
+
+  const content = buildFileContentArray(chunk);
+  content.push({
+    type: "text",
+    text: "Chapter: \"" + meta.title + "\"" +
+      (meta.source ? "\nSource: " + meta.source : "") +
+      "\n\nSummarise the content of these " + chunk.length + " pages for revision."
+  });
+
+  const data = await callClaudeAPI({
+    model: "claude-sonnet-4-6",
+    max_tokens: config.chunkTokens,
+    system: system,
+    messages: [{ role: "user", content: content }]
+  });
+
+  return data.content.map(function (b) { return b.text || ""; }).join("").trim();
+}
+
+// Reduce step — synthesise all section summaries into one final summary
+async function synthesisPass(chunkSummaries, existingText, meta, config) {
+  const sections = chunkSummaries.map(function (s, i) {
+    return "--- Section " + (i + 1) + " of " + chunkSummaries.length + " ---\n" + s;
+  }).join("\n\n");
+
+  const system = "You are a senior revision assistant inside Readora AI. " +
+    "You are given summaries of consecutive sections of an academic chapter. " +
+    "Synthesise them into ONE complete, coherent revision summary.\n\n" +
+    "Requirements:\n" +
+    "- Write as if you read the entire chapter yourself\n" +
+    "- Maintain logical chapter flow from beginning to end\n" +
+    "- Include important concepts from every section\n" +
+    "- Eliminate all repetition\n" +
+    "- Use consistent writing style throughout\n" +
+    "- Do NOT mention sections, chunks, or internal processing\n" +
+    "- " + config.finalGuide;
+
+  const userText = "Chapter: \"" + meta.title + "\"" +
+    (meta.source ? "\nSource: " + meta.source : "") +
+    (existingText ? "\n\nStudent\u2019s existing notes (incorporate, do not repeat):\n" + existingText : "") +
+    "\n\nSection summaries to synthesise:\n\n" + sections +
+    "\n\nWrite one complete, coherent revision summary of the entire chapter.";
+
+  const data = await callClaudeAPI({
+    model: "claude-sonnet-4-6",
+    max_tokens: config.finalTokens,
+    system: system,
+    messages: [{ role: "user", content: [{ type: "text", text: userText }] }]
+  });
+
+  return data.content.map(function (b) { return b.text || ""; }).join("").trim();
+}

@@ -125,6 +125,17 @@
           <!-- Summary Tab -->
           <div id="summaryEditorWrap" class="reader-page media-page active-page">
             <textarea id="summaryEditor" placeholder="Write or generate a summary of this chapter..."></textarea>
+
+            <div class="detail-level-bar">
+              <span class="detail-label">Summary depth:</span>
+              <div class="detail-options">
+                <button class="detail-btn" data-level="quick">Quick Revision</button>
+                <button class="detail-btn active" data-level="detailed">Detailed Summary</button>
+                <button class="detail-btn" data-level="comprehensive">Comprehensive Notes</button>
+              </div>
+              <p class="detail-hint" id="summaryDetailHint">All important concepts with explanations and examples. (~5–8 min read)</p>
+            </div>
+
             <div class="upload-section">
               <div class="upload-section-header">
                 <span>Upload pages or PDF for AI Summary</span>

@@ -1438,3 +1438,82 @@ body.dark-mode .reconnect-example { background: #141e10; color: #9ab088; }
 body.dark-mode .coach-complete h3 { color: #f0ebe4; }
 body.dark-mode .coach-complete-summary { color: #c0b0b0; }
 body.dark-mode .coach-complete-hint { color: #806868; }
+
+/* ── Detail Level Selector (Summary tab) ── */
+.detail-level-bar {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: #faf7f3;
+  border: 1.5px solid #e8ddd4;
+  border-radius: 12px;
+}
+
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6a5a4a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.detail-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.detail-btn {
+  background: white;
+  color: #5a4a3a;
+  border: 1.5px solid #e0d6cc;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.detail-btn:hover { background: #f5f0ea; border-color: #c8bab0; }
+.detail-btn:active { transform: scale(0.97); }
+
+.detail-btn.active {
+  background: #2e2020;
+  color: white;
+  border-color: #2e2020;
+  font-weight: 600;
+}
+
+.detail-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #8a7a6a;
+  line-height: 1.5;
+}
+
+body.dark-mode .detail-level-bar {
+  background: #1a1818;
+  border-color: #2a2a2a;
+}
+
+body.dark-mode .detail-label { color: #a09080; }
+
+body.dark-mode .detail-btn {
+  background: #222;
+  color: #c0b0a0;
+  border-color: #333;
+}
+
+body.dark-mode .detail-btn:hover { background: #2a2a2a; }
+
+body.dark-mode .detail-btn.active {
+  background: #c9b8b0;
+  color: #1a1a1a;
+  border-color: #c9b8b0;
+}
+
+body.dark-mode .detail-hint { color: #806860; }
