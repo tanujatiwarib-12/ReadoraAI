@@ -103,6 +103,7 @@
           </div>
           <span id="draftStatus" class="draft-status"></span>
           <button id="revisionCoachButton" class="coach-trigger-btn">Revision Coach</button>
+          <button id="examSimulatorButton" class="exam-trigger-btn">Exam Simulator</button>
           <button id="saveReaderButton" class="save-btn">Save Changes</button>
         </div>
 
@@ -321,6 +322,154 @@
 
     </div>
   </div>
+
+
+  <!-- Exam Simulator Overlay -->
+  <div id="examOverlay" class="exam-overlay hidden">
+    <div class="exam-panel">
+
+      <div class="exam-header">
+        <div class="exam-title-area">
+          <span class="exam-badge">Exam Simulator</span>
+          <p id="examNoteName" class="exam-note-name"></p>
+        </div>
+        <div id="examTimerDisplay" class="exam-timer-display hidden">
+          <div class="exam-timer-track">
+            <div id="examTimerBar" class="exam-timer-bar"></div>
+          </div>
+          <span id="examTimerText" class="exam-timer-text">25:00</span>
+        </div>
+        <div id="examProgressDisplay" class="exam-progress-display hidden">
+          <span id="examProgressText">Question 1 of 10</span>
+        </div>
+        <button id="examCloseButton" class="exam-close-btn">Exit</button>
+      </div>
+
+      <div class="exam-body">
+
+        <!-- Phase: Mode Selection -->
+        <div id="examPhaseMode" class="exam-phase">
+          <h3 class="exam-phase-title">How do you want to revise today?</h3>
+          <p class="exam-phase-sub">Questions are generated from your note content.</p>
+          <div class="exam-mode-cards">
+            <button class="exam-mode-card active" data-mode="class_test">
+              <span class="mode-icon">📝</span>
+              <span class="mode-name">Class Test</span>
+              <span class="mode-desc">Chapter-wise revision. You choose the questions, difficulty and time.</span>
+            </button>
+            <button class="exam-mode-card" data-mode="exam_mode">
+              <span class="mode-icon">📋</span>
+              <span class="mode-name">Exam Mode</span>
+              <span class="mode-desc">Broader revision before a part test or semester exam.</span>
+            </button>
+            <button class="exam-mode-card" data-mode="last_minute">
+              <span class="mode-icon">⚡</span>
+              <span class="mode-name">Last-Minute Revision</span>
+              <span class="mode-desc">Low on time? Readora maximises every minute before your exam.</span>
+            </button>
+          </div>
+          <div class="exam-phase-actions">
+            <button id="examModeNextButton" class="exam-primary-btn">Configure →</button>
+          </div>
+        </div>
+
+        <!-- Phase: Configuration -->
+        <div id="examPhaseConfig" class="exam-phase hidden">
+          <div id="configStandard">
+            <h3 class="exam-phase-title">Set up your exam</h3>
+            <div class="config-section">
+              <label class="config-label">Number of questions</label>
+              <div class="config-opts" id="configQuestionCount">
+                <button class="config-opt" data-value="5">5</button>
+                <button class="config-opt active" data-value="10">10</button>
+                <button class="config-opt" data-value="15">15</button>
+                <button class="config-opt" data-value="20">20</button>
+                <button class="config-opt" data-value="30">30</button>
+              </div>
+            </div>
+            <div class="config-section">
+              <label class="config-label">Difficulty</label>
+              <div class="config-opts" id="configDifficulty">
+                <button class="config-opt" data-value="easy">Easy</button>
+                <button class="config-opt active" data-value="mixed">Mixed</button>
+                <button class="config-opt" data-value="hard">Hard</button>
+              </div>
+            </div>
+            <div class="config-section">
+              <label class="config-label">Time limit</label>
+              <div class="config-opts" id="configTimeLimit">
+                <button class="config-opt active" data-value="0">No limit</button>
+                <button class="config-opt" data-value="600">10 min</button>
+                <button class="config-opt" data-value="900">15 min</button>
+                <button class="config-opt" data-value="1200">20 min</button>
+                <button class="config-opt" data-value="1800">30 min</button>
+              </div>
+            </div>
+          </div>
+          <div id="configLastMinute" class="hidden">
+            <h3 class="exam-phase-title">How much time do you have?</h3>
+            <p class="exam-phase-sub">Readora will build the highest-value revision session for your available time.</p>
+            <div class="config-opts config-time-opts" id="configAvailableTime">
+              <button class="config-opt" data-value="1800">30 minutes</button>
+              <button class="config-opt active" data-value="3600">1 hour</button>
+              <button class="config-opt" data-value="7200">2 hours</button>
+              <button class="config-opt" data-value="10800">3 hours</button>
+            </div>
+            <p class="config-hint">Readora auto-selects question types, count, and focus areas to maximise your preparation in this time.</p>
+          </div>
+          <div class="exam-phase-actions">
+            <button id="examConfigStartButton" class="exam-primary-btn">Start Exam</button>
+            <button id="examConfigBackButton" class="exam-ghost-btn">← Back</button>
+          </div>
+        </div>
+
+        <!-- Phase: Loading -->
+        <div id="examPhaseLoading" class="exam-phase hidden">
+          <div class="exam-loading-state">
+            <div class="exam-spinner"></div>
+            <p id="examLoadingText">Preparing your exam...</p>
+            <span>Generating questions from your notes</span>
+          </div>
+        </div>
+
+        <!-- Phase: Question -->
+        <div id="examPhaseQuestion" class="exam-phase hidden">
+          <div class="exam-q-meta">
+            <div class="exam-q-badges">
+              <span id="examQType" class="exam-type-badge"></span>
+              <span id="examQDifficulty" class="exam-diff-badge"></span>
+            </div>
+            <span id="examQTopic" class="exam-q-topic"></span>
+          </div>
+          <p id="examQuestionText" class="exam-question-text"></p>
+          <textarea id="examAnswerInput" class="exam-answer-input" placeholder="Type your answer here... (Ctrl+Enter to submit)"></textarea>
+          <div class="exam-phase-actions">
+            <button id="examSubmitAnswer" class="exam-primary-btn">Submit Answer</button>
+            <button id="examSkipQuestion" class="exam-ghost-btn">Skip</button>
+          </div>
+        </div>
+
+        <!-- Phase: Per-question Feedback -->
+        <div id="examPhaseFeedback" class="exam-phase hidden">
+          <div id="examFeedbackContent"></div>
+          <div class="exam-phase-actions">
+            <button id="examNextQuestion" class="exam-primary-btn">Next Question →</button>
+          </div>
+        </div>
+
+        <!-- Phase: Results Dashboard -->
+        <div id="examPhaseResults" class="exam-phase hidden">
+          <div id="examResultsContent"></div>
+          <div class="exam-result-actions">
+            <button id="examOpenCoachButton" class="exam-primary-btn">Study Weak Areas with Revision Coach</button>
+            <button id="examRetakeButton" class="exam-secondary-btn">Retake</button>
+            <button id="examFinishButton" class="exam-ghost-btn">Back to Notes</button>
+          </div>
+        </div>
+
+      </div><!-- .exam-body -->
+    </div><!-- .exam-panel -->
+  </div><!-- .exam-overlay -->
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-client.js"></script>

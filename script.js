@@ -1601,3 +1601,571 @@ async function synthesisPass(chunkSummaries, existingText, meta, config) {
 
   return data.content.map(function (b) { return b.text || ""; }).join("").trim();
 }
+
+// ─── Exam Simulator ────────────────────────────────────────────
+
+const examSimulatorButton  = document.getElementById("examSimulatorButton");
+const examOverlay          = document.getElementById("examOverlay");
+const examCloseButton      = document.getElementById("examCloseButton");
+const examNoteNameEl       = document.getElementById("examNoteName");
+const examTimerDisplay     = document.getElementById("examTimerDisplay");
+const examTimerBar         = document.getElementById("examTimerBar");
+const examTimerText        = document.getElementById("examTimerText");
+const examProgressDisplay  = document.getElementById("examProgressDisplay");
+const examProgressText     = document.getElementById("examProgressText");
+const examPhaseMode        = document.getElementById("examPhaseMode");
+const examPhaseConfig      = document.getElementById("examPhaseConfig");
+const examPhaseLoading     = document.getElementById("examPhaseLoading");
+const examPhaseQuestion    = document.getElementById("examPhaseQuestion");
+const examPhaseFeedback    = document.getElementById("examPhaseFeedback");
+const examPhaseResults     = document.getElementById("examPhaseResults");
+const examModeNextButton   = document.getElementById("examModeNextButton");
+const configStandardDiv    = document.getElementById("configStandard");
+const configLastMinuteDiv  = document.getElementById("configLastMinute");
+const examConfigStartBtn   = document.getElementById("examConfigStartButton");
+const examConfigBackBtn    = document.getElementById("examConfigBackButton");
+const examLoadingText      = document.getElementById("examLoadingText");
+const examQType            = document.getElementById("examQType");
+const examQDifficulty      = document.getElementById("examQDifficulty");
+const examQTopic           = document.getElementById("examQTopic");
+const examQuestionText     = document.getElementById("examQuestionText");
+const examAnswerInput      = document.getElementById("examAnswerInput");
+const examSubmitAnswer     = document.getElementById("examSubmitAnswer");
+const examSkipQuestion     = document.getElementById("examSkipQuestion");
+const examFeedbackContent  = document.getElementById("examFeedbackContent");
+const examNextQuestion     = document.getElementById("examNextQuestion");
+const examResultsContent   = document.getElementById("examResultsContent");
+const examOpenCoachBtn     = document.getElementById("examOpenCoachButton");
+const examRetakeBtn        = document.getElementById("examRetakeButton");
+const examFinishBtn        = document.getElementById("examFinishButton");
+
+const ALL_EXAM_PHASES = [examPhaseMode, examPhaseConfig, examPhaseLoading,
+                          examPhaseQuestion, examPhaseFeedback, examPhaseResults];
+
+// ── Exam State ────────────────────────────────────────────────
+let exam = {
+  mode: "class_test",
+  config: { questionCount: 10, difficulty: "mixed", timeLimit: 0, availableTime: 3600 },
+  questions: [],
+  currentIndex: 0,
+  results: [],
+  startTime: null,
+  weakTopics: [],
+  timerInterval: null,
+  timerRemaining: 0
+};
+
+// ── Helpers ───────────────────────────────────────────────────
+function showExamPhase(name) {
+  var map = { mode: examPhaseMode, config: examPhaseConfig, loading: examPhaseLoading,
+              question: examPhaseQuestion, feedback: examPhaseFeedback, results: examPhaseResults };
+  ALL_EXAM_PHASES.forEach(function(p) { p.classList.add("hidden"); });
+  if (map[name]) map[name].classList.remove("hidden");
+}
+
+function getExamContent() {
+  if (!openNoteId) return "";
+  var note = notes.find(function(n) { return n.id === openNoteId; });
+  if (!note) return "";
+  return [note.summary, note.takeaways, note.questions, note.examples, note.personalNotes]
+    .filter(Boolean).join("\n\n");
+}
+
+function getActiveConfigVal(containerId) {
+  var el = document.getElementById(containerId);
+  if (!el) return null;
+  var active = el.querySelector(".config-opt.active");
+  return active ? active.dataset.value : null;
+}
+
+function resetExam() {
+  stopExamTimer();
+  exam.questions = []; exam.currentIndex = 0; exam.results = [];
+  exam.startTime = null; exam.weakTopics = [];
+  exam.timerRemaining = 0;
+  examTimerDisplay.classList.add("hidden");
+  examProgressDisplay.classList.add("hidden");
+  examTimerText.style.color = "";
+  examTimerText.style.fontWeight = "";
+  // Reset mode selection
+  document.querySelectorAll(".exam-mode-card").forEach(function(c) { c.classList.remove("active"); });
+  var defaultCard = document.querySelector('.exam-mode-card[data-mode="class_test"]');
+  if (defaultCard) defaultCard.classList.add("active");
+  exam.mode = "class_test";
+  // Reset config options
+  [["configQuestionCount","10"],["configDifficulty","mixed"],
+   ["configTimeLimit","0"],["configAvailableTime","3600"]].forEach(function(pair) {
+    var el = document.getElementById(pair[0]);
+    if (!el) return;
+    el.querySelectorAll(".config-opt").forEach(function(b) {
+      b.classList.toggle("active", b.dataset.value === pair[1]);
+    });
+  });
+}
+
+// ── Open / Close ──────────────────────────────────────────────
+function openExamSimulator() {
+  if (!openNoteId) return;
+  var note = notes.find(function(n) { return n.id === openNoteId; });
+  if (!note) return;
+  if (!getExamContent().trim()) {
+    alert("This note has no content yet.\nGenerate a Summary or Key Takeaways first, then try the Exam Simulator.");
+    return;
+  }
+  examNoteNameEl.textContent = note.title || "Untitled Note";
+  resetExam();
+  showExamPhase("mode");
+  examOverlay.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeExamSimulator() {
+  stopExamTimer();
+  examOverlay.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+examSimulatorButton.addEventListener("click", openExamSimulator);
+examCloseButton.addEventListener("click", closeExamSimulator);
+examFinishBtn.addEventListener("click", closeExamSimulator);
+examOverlay.addEventListener("click", function(e) { if (e.target === examOverlay) closeExamSimulator(); });
+
+// ── Mode Selection ────────────────────────────────────────────
+document.querySelectorAll(".exam-mode-card").forEach(function(card) {
+  card.addEventListener("click", function() {
+    document.querySelectorAll(".exam-mode-card").forEach(function(c) { c.classList.remove("active"); });
+    card.classList.add("active");
+    exam.mode = card.dataset.mode;
+  });
+});
+
+examModeNextButton.addEventListener("click", function() {
+  if (exam.mode === "last_minute") {
+    configStandardDiv.classList.add("hidden");
+    configLastMinuteDiv.classList.remove("hidden");
+  } else {
+    configStandardDiv.classList.remove("hidden");
+    configLastMinuteDiv.classList.add("hidden");
+  }
+  showExamPhase("config");
+});
+
+examConfigBackBtn.addEventListener("click", function() { showExamPhase("mode"); });
+
+// Config option buttons
+["configQuestionCount","configDifficulty","configTimeLimit","configAvailableTime"].forEach(function(id) {
+  var container = document.getElementById(id);
+  if (!container) return;
+  container.querySelectorAll(".config-opt").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      container.querySelectorAll(".config-opt").forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+    });
+  });
+});
+
+// ── Start Exam ────────────────────────────────────────────────
+examConfigStartBtn.addEventListener("click", async function() {
+  if (exam.mode === "last_minute") {
+    var avail = parseInt(getActiveConfigVal("configAvailableTime")) || 3600;
+    exam.config.availableTime  = avail;
+    exam.config.questionCount  = avail <= 1800 ? 8 : avail <= 3600 ? 12 : 15;
+    exam.config.difficulty     = "mixed";
+    exam.config.timeLimit      = Math.round(avail * 0.55);
+  } else {
+    exam.config.questionCount  = parseInt(getActiveConfigVal("configQuestionCount")) || 10;
+    exam.config.difficulty     = getActiveConfigVal("configDifficulty") || "mixed";
+    exam.config.timeLimit      = parseInt(getActiveConfigVal("configTimeLimit")) || 0;
+  }
+
+  showExamPhase("loading");
+  examLoadingText.textContent = "Generating " + exam.config.questionCount + " questions from your notes...";
+
+  try {
+    await generateExamQuestions();
+    exam.startTime = Date.now();
+    if (exam.config.timeLimit > 0) startExamTimer(exam.config.timeLimit);
+    displayExamQuestion();
+    showExamPhase("question");
+  } catch(err) {
+    showExamPhase("config");
+    alert("Failed to generate questions — please try again.\n(" + err.message + ")");
+  }
+});
+
+// ── Question Generation ───────────────────────────────────────
+async function generateExamQuestions() {
+  var meta    = getNoteMeta();
+  var content = getExamContent();
+  var count   = exam.config.questionCount;
+  var diff    = exam.config.difficulty;
+  var mode    = exam.mode;
+
+  var modeGuide = {
+    class_test:   "Generate chapter-level revision questions suitable for a class test. Mix recall, application, and concept-check questions.",
+    exam_mode:    "Generate comprehensive revision questions for a part test or semester exam. Include definitions, application, analysis, and tricky concept questions. Lean toward application and analytical questions.",
+    last_minute:  "Generate HIGH-PRIORITY rapid-revision questions. Focus on: key formulas and their applications (25%), core definitions (25%), common exam traps and edge cases (25%), high-frequency application questions (25%). Questions must be answerable concisely. Prioritise high-yield content only."
+  }[mode] || "";
+
+  var diffGuide = {
+    easy:  "All questions should be straightforward recall or direct application.",
+    mixed: "Mix difficulty: ~30% easy, ~50% medium, ~20% hard.",
+    hard:  "Questions should be challenging — application-heavy, analytical, or involve tricky edge cases and misconceptions."
+  }[diff] || "";
+
+  var system = "You are an expert exam question generator for a student revision platform.\n" +
+    modeGuide + "\n" + diffGuide + "\n\n" +
+    "Output ONLY a valid JSON array — no markdown, no backticks, no explanation:\n" +
+    "[{\"question\":\"...\",\"type\":\"recall|application|concept_check|formula\",\"difficulty\":\"easy|medium|hard\",\"topic\":\"specific concept name\",\"expected_points\":[\"key point 1\",\"key point 2\"]}]\n\n" +
+    "Generate exactly " + count + " questions. Base all questions on the provided note content only.";
+
+  var result = await callClaudeAPI({
+    model: "claude-sonnet-4-6",
+    max_tokens: Math.max(1200, count * 130),
+    system: system,
+    messages: [{
+      role: "user",
+      content: "Chapter: \"" + meta.title + "\"" +
+        (meta.source   ? "\nSource: "  + meta.source   : "") +
+        (meta.category ? "\nSubject: " + meta.category : "") +
+        "\n\nNOTE CONTENT:\n" + content +
+        "\n\nGenerate " + count + " exam questions."
+    }]
+  });
+
+  var raw   = result.content.map(function(b) { return b.text || ""; }).join("").trim();
+  var clean = raw.replace(/```json|```/g, "").trim();
+  exam.questions = JSON.parse(clean);
+  if (!Array.isArray(exam.questions) || exam.questions.length === 0) {
+    throw new Error("No questions generated. Ensure your note has sufficient content.");
+  }
+}
+
+// ── Display Question ──────────────────────────────────────────
+function displayExamQuestion() {
+  var q     = exam.questions[exam.currentIndex];
+  var total = exam.questions.length;
+  var cur   = exam.currentIndex + 1;
+
+  examProgressText.textContent = "Question " + cur + " of " + total;
+  examProgressDisplay.classList.remove("hidden");
+
+  var typeLabels = { recall: "Recall", application: "Application",
+                     concept_check: "Concept Check", formula: "Formula" };
+  examQType.textContent       = typeLabels[q.type] || "Question";
+  examQType.className         = "exam-type-badge type-" + (q.type || "recall");
+  examQDifficulty.textContent = q.difficulty ? (q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1)) : "Medium";
+  examQDifficulty.className   = "exam-diff-badge diff-" + (q.difficulty || "medium");
+  examQTopic.textContent      = q.topic || "";
+  examQuestionText.textContent = q.question;
+  examAnswerInput.value       = "";
+  examNextQuestion.classList.add("hidden");
+  setTimeout(function() { examAnswerInput.focus(); }, 60);
+}
+
+// ── Submit / Skip ─────────────────────────────────────────────
+examSubmitAnswer.addEventListener("click", function() {
+  var answer = examAnswerInput.value.trim();
+  if (!answer) {
+    examAnswerInput.placeholder = "Please write an answer first...";
+    setTimeout(function() { examAnswerInput.placeholder = "Type your answer here... (Ctrl+Enter to submit)"; }, 2000);
+    return;
+  }
+  handleAnswer(answer, false);
+});
+
+examSkipQuestion.addEventListener("click", function() { handleAnswer("", true); });
+
+examAnswerInput.addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && e.ctrlKey) { examSubmitAnswer.click(); }
+});
+
+async function handleAnswer(answer, skipped) {
+  examSubmitAnswer.disabled = true;
+  examSkipQuestion.disabled = true;
+  var q = exam.questions[exam.currentIndex];
+
+  if (skipped) {
+    exam.results.push({ score: 0, correct: [], missing: q.expected_points || [],
+                        wrong: [], mistake_category: "skipped",
+                        feedback: "Question skipped.", skipped: true });
+    renderExamFeedback(exam.results[exam.results.length - 1]);
+    examSubmitAnswer.disabled = false;
+    examSkipQuestion.disabled = false;
+    return;
+  }
+
+  showExamPhase("feedback");
+  examFeedbackContent.innerHTML =
+    '<div class="fb-loading"><div class="exam-spinner"></div><p>Evaluating your answer\u2026</p></div>';
+  examNextQuestion.classList.add("hidden");
+
+  try {
+    var result = await evaluateExamAnswer(q, answer);
+    exam.results.push(Object.assign({}, result, { skipped: false }));
+    renderExamFeedback(exam.results[exam.results.length - 1]);
+  } catch(err) {
+    var fallback = { score: 5, correct: ["Answer received"], missing: [],
+                     wrong: [], mistake_category: "other",
+                     feedback: "Could not fully evaluate \u2014 review the expected points manually.",
+                     skipped: false };
+    exam.results.push(fallback);
+    renderExamFeedback(fallback);
+  }
+
+  examSubmitAnswer.disabled = false;
+  examSkipQuestion.disabled = false;
+}
+
+async function evaluateExamAnswer(question, answer) {
+  var system = "You are an experienced examiner. Evaluate the student's answer fairly and thoroughly.\n\n" +
+    "Output ONLY valid JSON \u2014 no markdown:\n" +
+    "{\"score\":8,\"correct\":[\"what they got right\"],\"missing\":[\"important points missed\"],\"wrong\":[\"anything incorrect\"],\"mistake_category\":\"concept_misunderstanding|formula_forgotten|careless_mistake|incomplete_reasoning|misread_question|good_answer\",\"feedback\":\"one honest, encouraging sentence\"}";
+
+  var result = await callClaudeAPI({
+    model: "claude-sonnet-4-6",
+    max_tokens: 450,
+    system: system,
+    messages: [{
+      role: "user",
+      content: "Question: " + question.question +
+        "\nExpected points: " + JSON.stringify(question.expected_points || []) +
+        "\nStudent's answer: " + answer +
+        "\n\nScore out of 10."
+    }]
+  });
+
+  var raw   = result.content.map(function(b) { return b.text || ""; }).join("").trim();
+  var clean = raw.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
+// ── Feedback Render ───────────────────────────────────────────
+function renderExamFeedback(result) {
+  var scoreColor = result.score >= 8 ? "#2a6a2a" : result.score >= 5 ? "#7a5010" : "#8a2020";
+  var scoreBg    = result.score >= 8 ? "#f0faf0" : result.score >= 5 ? "#fff8ec" : "#fff0f0";
+
+  var mistakeLabels = {
+    concept_misunderstanding: "Concept misunderstanding",
+    formula_forgotten:        "Formula forgotten",
+    careless_mistake:         "Careless mistake",
+    incomplete_reasoning:     "Incomplete reasoning",
+    misread_question:         "Misread question",
+    good_answer:              "Well answered",
+    skipped:                  "Skipped"
+  };
+
+  var li = function(arr) { return arr.map(function(x) { return "<li>" + x + "</li>"; }).join(""); };
+
+  if (result.skipped) {
+    examFeedbackContent.innerHTML =
+      '<div class="fb-skipped">' +
+      '<p class="fb-skipped-title">Question skipped.</p>' +
+      '<p class="fb-skipped-hint">In your real exam, always attempt something \u2014 partial answers earn marks.</p>' +
+      (result.missing && result.missing.length > 0
+        ? '<div class="fb-section fb-missing"><div class="fb-label">\U0001f7e1 What you should know</div><ul>' + li(result.missing) + '</ul></div>'
+        : '') +
+      '</div>';
+  } else {
+    var badge = result.mistake_category && result.mistake_category !== "other"
+      ? '<span class="mistake-badge mistake-' + result.mistake_category + '">' + (mistakeLabels[result.mistake_category] || result.mistake_category) + '</span>'
+      : '';
+
+    examFeedbackContent.innerHTML =
+      '<div class="fb-score-row">' +
+      '<div class="fb-score" style="background:' + scoreBg + ';color:' + scoreColor + '">' + result.score + '<span>/10</span></div>' +
+      badge + '</div>' +
+      (result.correct && result.correct.length > 0
+        ? '<div class="fb-section fb-correct"><div class="fb-label">\u2705 Correct</div><ul>' + li(result.correct) + '</ul></div>' : '') +
+      (result.missing && result.missing.length > 0
+        ? '<div class="fb-section fb-missing"><div class="fb-label">\U0001f7e1 Missed</div><ul>' + li(result.missing) + '</ul></div>' : '') +
+      (result.wrong && result.wrong.length > 0
+        ? '<div class="fb-section fb-wrong"><div class="fb-label">\u274c Incorrect</div><ul>' + li(result.wrong) + '</ul></div>' : '') +
+      '<p class="fb-feedback">\u201c' + (result.feedback || "") + '\u201d</p>';
+  }
+
+  examNextQuestion.classList.remove("hidden");
+  showExamPhase("feedback");
+}
+
+examNextQuestion.addEventListener("click", function() {
+  exam.currentIndex++;
+  if (exam.currentIndex >= exam.questions.length) {
+    finishExam();
+  } else {
+    displayExamQuestion();
+    showExamPhase("question");
+  }
+});
+
+// ── Timer ─────────────────────────────────────────────────────
+function startExamTimer(seconds) {
+  exam.timerRemaining = seconds;
+  examTimerDisplay.classList.remove("hidden");
+  renderTimer();
+  exam.timerInterval = setInterval(function() {
+    exam.timerRemaining--;
+    renderTimer();
+    if (exam.timerRemaining <= 0) {
+      stopExamTimer();
+      finishExam();
+    }
+  }, 1000);
+}
+
+function renderTimer() {
+  var r = exam.timerRemaining;
+  var total = exam.config.timeLimit;
+  var m = Math.floor(r / 60);
+  var s = r % 60;
+  examTimerText.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+  var pct = total > 0 ? Math.max(0, (r / total) * 100) : 100;
+  examTimerBar.style.width = pct + "%";
+  examTimerBar.style.background = pct > 50 ? "#3d7a3d" : pct > 20 ? "#c07020" : "#9a2020";
+  if (r <= 60) { examTimerText.style.color = "#9a2020"; examTimerText.style.fontWeight = "700"; }
+}
+
+function stopExamTimer() {
+  if (exam.timerInterval) { clearInterval(exam.timerInterval); exam.timerInterval = null; }
+}
+
+// ── Results ───────────────────────────────────────────────────
+function finishExam() {
+  stopExamTimer();
+  examTimerDisplay.classList.add("hidden");
+  examProgressDisplay.classList.add("hidden");
+  var data = calcExamResults();
+  exam.weakTopics = data.weakTopics.map(function(t) { return t.topic; });
+  renderResults(data);
+  showExamPhase("results");
+}
+
+function calcExamResults() {
+  var results   = exam.results;
+  var questions = exam.questions;
+  var answered  = results.filter(function(r) { return !r.skipped; });
+  var skipped   = results.filter(function(r) { return r.skipped; }).length;
+  var correct   = answered.filter(function(r) { return r.score >= 7; }).length;
+  var incorrect = answered.filter(function(r) { return r.score < 7; }).length;
+  var totalScore = answered.reduce(function(s, r) { return s + r.score; }, 0);
+  var maxScore   = results.length * 10;
+  var scorePct   = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+  var accuracy   = answered.length > 0 ? Math.round((correct / answered.length) * 100) : 0;
+  var skipPenalty = skipped > 0 ? Math.max(0, 10 - skipped * 2) : 10;
+  var readiness  = Math.min(100, Math.round(scorePct * 0.65 + accuracy * 0.25 + skipPenalty * 0.1));
+  var confidence = readiness >= 75 ? "High" : readiness >= 55 ? "Medium" : "Needs Work";
+  var remark     = getExamRemark(readiness, skipped, results.length);
+
+  // Topic breakdown
+  var topicMap = {};
+  results.forEach(function(r, i) {
+    var topic = (questions[i] && questions[i].topic) ? questions[i].topic : "General";
+    if (!topicMap[topic]) topicMap[topic] = { total: 0, count: 0 };
+    topicMap[topic].total += r.score;
+    topicMap[topic].count += 1;
+  });
+  var topicBreakdown = Object.entries(topicMap).map(function(entry) {
+    return { topic: entry[0], pct: Math.round((entry[1].total / (entry[1].count * 10)) * 100) };
+  }).sort(function(a, b) { return a.pct - b.pct; });
+
+  // Mistake analysis
+  var mistakeCount = {};
+  answered.filter(function(r) { return r.score < 7; }).forEach(function(r) {
+    var cat = r.mistake_category || "other";
+    if (cat !== "good_answer" && cat !== "other" && cat !== "skipped") {
+      mistakeCount[cat] = (mistakeCount[cat] || 0) + 1;
+    }
+  });
+
+  var timeTaken = exam.startTime ? Math.round((Date.now() - exam.startTime) / 1000) : 0;
+
+  return {
+    scorePct, correct, incorrect, skipped, accuracy, readiness, confidence, remark,
+    topicBreakdown, mistakeCount, timeTaken,
+    weakTopics:   topicBreakdown.filter(function(t) { return t.pct < 60; }),
+    strongTopics: topicBreakdown.filter(function(t) { return t.pct >= 70; })
+  };
+}
+
+function getExamRemark(readiness, skipped, total) {
+  if (skipped > total * 0.3) return "You skipped several questions. In your actual exam, always attempt something \u2014 partial answers earn marks.";
+  if (readiness >= 85) return "Excellent preparation. Walk into your exam with confidence \u2014 you\u2019ve got this.";
+  if (readiness >= 70) return "Strong foundation. A quick revision of the weak areas will sharpen your readiness significantly.";
+  if (readiness >= 55) return "Decent base. Focus on the identified weak areas before your exam \u2014 you\u2019re closer than you think.";
+  if (readiness >= 40) return "Some important gaps to address. Use the Revision Coach to rebuild the missing pieces \u2014 you still have time.";
+  return "More revision needed \u2014 but don\u2019t worry, identifying gaps now is exactly why Readora exists. Start with the weak areas.";
+}
+
+function renderResults(data) {
+  var fmtTime = function(s) {
+    var m = Math.floor(s / 60), sec = s % 60;
+    return m + "m " + (sec < 10 ? "0" : "") + sec + "s";
+  };
+
+  var sc = data.scorePct >= 75 ? "#2a6a2a" : data.scorePct >= 50 ? "#7a5010" : "#8a2020";
+  var rc = data.readiness >= 75 ? "#2a6a2a" : data.readiness >= 55 ? "#7a5010" : "#8a2020";
+  var rb = data.readiness >= 75 ? "#f0faf0" : data.readiness >= 55 ? "#fff8ec" : "#fff0f0";
+
+  var topicsHtml = data.topicBreakdown.map(function(t) {
+    var cls  = t.pct >= 70 ? "strong" : t.pct >= 50 ? "medium" : "weak";
+    var icon = t.pct >= 70 ? "\u2705" : t.pct >= 50 ? "\U0001f7e1" : "\u274c";
+    return '<div class="topic-row">' +
+      '<span class="topic-name">' + icon + " " + t.topic + '</span>' +
+      '<div class="topic-track"><div class="topic-fill topic-fill-' + cls + '" style="width:' + t.pct + '%"></div></div>' +
+      '<span class="topic-pct">' + t.pct + '%</span></div>';
+  }).join("");
+
+  var mistakeLabels = {
+    concept_misunderstanding: "Concept misunderstanding",
+    formula_forgotten:        "Formula forgotten",
+    careless_mistake:         "Careless mistake",
+    incomplete_reasoning:     "Incomplete reasoning",
+    misread_question:         "Misread question"
+  };
+  var mistakesHtml = Object.entries(data.mistakeCount).map(function(entry) {
+    return '<div class="mistake-row"><span>' + (mistakeLabels[entry[0]] || entry[0]) + '</span>' +
+      '<span class="mistake-cnt">\xd7' + entry[1] + '</span></div>';
+  }).join("");
+
+  examResultsContent.innerHTML =
+    '<div class="results-top">' +
+      '<div class="results-score-block">' +
+        '<div class="results-big-num" style="color:' + sc + '">' + data.scorePct + '<span>%</span></div>' +
+        '<p class="results-label">Score</p>' +
+      '</div>' +
+      '<div class="results-readiness-block" style="background:' + rb + ';border-color:' + rc + '">' +
+        '<div class="results-readiness-num" style="color:' + rc + '">' + data.readiness + '%</div>' +
+        '<p class="results-label">Exam Readiness</p>' +
+        '<span class="results-confidence" style="color:' + rc + '">' + data.confidence + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<p class="results-remark">' + data.remark + '</p>' +
+    '<div class="results-stats">' +
+      '<div class="stat-item stat-c"><span>' + data.correct + '</span><p>Correct</p></div>' +
+      '<div class="stat-item stat-i"><span>' + data.incorrect + '</span><p>Incorrect</p></div>' +
+      '<div class="stat-item stat-s"><span>' + data.skipped + '</span><p>Skipped</p></div>' +
+      '<div class="stat-item"><span>' + data.accuracy + '%</span><p>Accuracy</p></div>' +
+      '<div class="stat-item"><span>' + fmtTime(data.timeTaken) + '</span><p>Time Taken</p></div>' +
+    '</div>' +
+    '<div class="results-section"><h4>Topic-wise Performance</h4>' +
+      '<div class="topics-list">' + topicsHtml + '</div></div>' +
+    (mistakesHtml ? '<div class="results-section"><h4>Mistake Analysis</h4><div class="mistakes-list">' + mistakesHtml + '</div></div>' : '') +
+    (data.weakTopics.length > 0
+      ? '<div class="results-section results-weak-box">' +
+        '<h4>\u26a0\ufe0f Priority Revision Areas</h4>' +
+        '<p class="weak-topics-text">' + data.weakTopics.map(function(t) { return t.topic; }).join(" \u00b7 ") + '</p>' +
+        '</div>' : '');
+
+  examOpenCoachBtn.style.display = data.weakTopics.length > 0 ? "" : "none";
+}
+
+examRetakeBtn.addEventListener("click", function() {
+  stopExamTimer();
+  resetExam();
+  showExamPhase("mode");
+});
+
+examOpenCoachBtn.addEventListener("click", function() {
+  closeExamSimulator();
+  setTimeout(openRevisionCoach, 100);
+});
